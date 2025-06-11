@@ -1,0 +1,83 @@
+services:
+  notification-service:
+    container_name: notification-service
+    build: ./notification-service
+    ports:
+      - "3000:3000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    volumes:
+      - /app/node_modules
+    networks:
+      - node-webapp-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "--timeout=5", "http://localhost:3000/health"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  user-service:
+    container_name: user-service
+    build: ./user-service
+    ports:
+      - "3010:3000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      - MONGODB_URI=mongodb://app_user:app_password@mongo:27017/admin
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    volumes:
+      - /app/node_modules
+    networks:
+      - node-webapp-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "--timeout=5", "http://localhost:3000/health"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+      
+  mongo:
+    container_name: mongo
+    image: mongo:6.0
+    volumes:
+      - ~/mongo:/data/db
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=app_user
+      - MONGO_INITDB_ROOT_PASSWORD=app_password
+      - MONGO_INITDB_DATABASE=admin
+    networks:
+      - node-webapp-network
+    healthcheck:
+      test: ["CMD","mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 300s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"      # Broker
+      - "15672:15672"    # Management UI
+    networks:
+      - node-webapp-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 300s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+networks:
+  node-webapp-network:
+    driver: bridge
